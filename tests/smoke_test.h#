@@ -1,0 +1,62 @@
+mod qt
+
+#[test]
+fn test_app_lifecycle() is
+    qt::init()
+    assert_true(qt::is_running())
+end
+
+#[test]
+fn test_widget_handles_are_nonzero() is
+    let window: qt::Widget = qt::new_window("test", 100, 100)
+    assert_true(window.handle != 0)
+
+    let label: qt::Widget = qt::new_label("hello")
+    assert_true(label.handle != 0)
+
+    let button: qt::Widget = qt::new_button("click")
+    assert_true(button.handle != 0)
+
+    qt::destroy(label)
+    qt::destroy(button)
+    qt::destroy(window)
+end
+
+#[test]
+fn test_label_text_roundtrip() is
+    let label: qt::Widget = qt::new_label("początek")
+    assert_eq(qt::label_get_text(label), "początek")
+
+    qt::label_set_text(label, "zmieniono")
+    assert_eq(qt::label_get_text(label), "zmieniono")
+
+    qt::destroy(label)
+end
+
+#[test]
+fn test_checkbox_toggle() is
+    let cb: qt::Widget = qt::new_checkbox("zgadzam się")
+    assert_true(!qt::checkbox_is_checked(cb))
+
+    qt::checkbox_set_checked(cb, true)
+    assert_true(qt::checkbox_is_checked(cb))
+
+    qt::destroy(cb)
+end
+
+#[test]
+fn test_slider_bounds() is
+    let slider: qt::Widget = qt::new_slider(0, 100, 42)
+    assert_eq(qt::slider_get_value(slider), 42)
+
+    qt::slider_set_value(slider, 7)
+    assert_eq(qt::slider_get_value(slider), 7)
+
+    qt::destroy(slider)
+end
+
+#[test]
+fn test_no_pending_events_initially() is
+    let ev = qt::poll_event()
+    assert_true(ev == nil)
+end
