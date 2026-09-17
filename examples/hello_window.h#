@@ -1,0 +1,21 @@
+mod qt
+
+fn main() is
+    qt::init()
+
+    let window:    qt::Widget = qt::new_window("Hello, Qt6!", 400, 200)
+    let container: qt::Widget = qt::new_container()
+    let label:     qt::Widget = qt::new_label("Witaj ze świata H# + Qt6!")
+
+    let layout: qt::Layout = qt::new_vbox()
+    qt::layout_add_widget(layout, label)
+    qt::widget_set_layout(container, layout)
+
+    ;; QMainWindow chce centralnego widgetu, a nie layoutu wprost —
+    ;; dlatego cała zawartość ląduje w `container`, a `container`
+    ;; trafia do okna przez `window_set_central_widget`.
+    qt::window_set_central_widget(window, container)
+
+    qt::show(window)
+    qt::run()
+end
