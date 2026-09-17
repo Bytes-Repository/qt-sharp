@@ -1,0 +1,49 @@
+mod qt
+
+fn main() is
+    qt::init()
+
+    let window:    qt::Widget = qt::new_window("Licznik kliknięć", 320, 180)
+    let container: qt::Widget = qt::new_container()
+
+    let label:  qt::Widget = qt::new_label("Kliknięto: 0 razy")
+    let button: qt::Widget = qt::new_button("Kliknij mnie")
+    let edit:   qt::Widget = qt::new_lineedit("Wpisz coś i naciśnij Enter…")
+
+    let layout: qt::Layout = qt::new_vbox()
+    qt::layout_add_widget(layout, label)
+    qt::layout_add_widget(layout, button)
+    qt::layout_add_widget(layout, edit)
+    qt::widget_set_layout(container, layout)
+
+    qt::window_set_central_widget(window, container)
+    qt::show(window)
+
+    let mut clicks:      int  = 0
+    let mut keep_going:  bool = true
+
+    while keep_going is
+        qt::process_events()
+
+        let ev = qt::poll_event()
+        if ev != nil is
+            match ev.kind is
+                qt::EventKind::Clicked => is
+                    clicks = clicks + 1
+                    qt::label_set_text(label, "Kliknięto: " + to_string(clicks) + " razy")
+                end
+                qt::EventKind::ReturnPressed => is
+                    let typed: string = qt::lineedit_get_text(edit)
+                    qt::show_info(window, "Wpisany tekst", "Napisałeś: " + typed)
+                    qt::lineedit_set_text(edit, "")
+                end
+                qt::EventKind::WindowClosed => is
+                    keep_going = false
+                end
+                _ => is end
+            end
+        end
+
+        keep_going = keep_going && qt::is_running()
+    end
+end
