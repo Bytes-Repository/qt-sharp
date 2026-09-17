@@ -1,1 +1,15 @@
+[package]
+-> name        => qt-hsharp
+-> version     => 0.1.0
+-> description => Qt6 Widgets bindings for H# (extern static C shim over Qt6)
+-> author      => Bytes Developers
+-> license     => MIT
 
+[build]
+-> lang    => h#
+-> entry   => src/qt.h#
+-> output  => build/libqt_hsharp
+-> emit    => lib
+-> flags   => -Lnative -Inative/include
+
+[deps]
