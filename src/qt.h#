@@ -1,1 +1,379 @@
+extern static [c, "qthsharp"] is
+    ;; Cykl życia aplikacji
+    fn qth_app_init() -> int
+    fn qth_app_exec() -> int
+    fn qth_app_quit()
+    fn qth_app_process_events()
+    fn qth_app_is_running() -> i8
+    fn qth_app_set_style(style_name: string)
+    fn qth_app_set_app_name(name: string)
 
+    ;; Tworzenie okien / widgetów
+    fn qth_window_new(title: string, width: i32, height: i32) -> int
+    fn qth_widget_new() -> int
+    fn qth_button_new(text: string) -> int
+    fn qth_label_new(text: string) -> int
+    fn qth_lineedit_new(placeholder: string) -> int
+    fn qth_checkbox_new(text: string) -> int
+    fn qth_slider_new(min: i32, max: i32, initial: i32) -> int
+
+    ;; Layouty
+    fn qth_vbox_new() -> int
+    fn qth_hbox_new() -> int
+    fn qth_layout_add_widget(layout_h: int, widget_h: int)
+    fn qth_layout_add_spacing(layout_h: int, px: i32)
+    fn qth_layout_add_stretch(layout_h: int, stretch: i32)
+    fn qth_layout_set_margins(layout_h: int, l: i32, t: i32, r: i32, b: i32)
+    fn qth_widget_set_layout(widget_h: int, layout_h: int)
+
+    ;; Ogólne operacje na QWidget
+    fn qth_widget_show(h: int)
+    fn qth_widget_hide(h: int)
+    fn qth_widget_close(h: int)
+    fn qth_widget_resize(h: int, w: i32, hgt: i32)
+    fn qth_widget_move(h: int, x: i32, y: i32)
+    fn qth_widget_set_enabled(h: int, enabled: i8)
+    fn qth_widget_set_visible(h: int, visible: i8)
+    fn qth_widget_set_style_sheet(h: int, css: string)
+    fn qth_widget_set_fixed_size(h: int, w: i32, hgt: i32)
+    fn qth_window_set_central_widget(window_h: int, widget_h: int)
+    fn qth_window_set_title(h: int, title: string)
+    fn qth_widget_destroy(h: int)
+
+    ;; QLabel
+    fn qth_label_set_text(h: int, text: string)
+    fn qth_label_get_text(h: int) -> string
+
+    ;; QPushButton
+    fn qth_button_set_text(h: int, text: string)
+
+    ;; QLineEdit
+    fn qth_lineedit_get_text(h: int) -> string
+    fn qth_lineedit_set_text(h: int, text: string)
+    fn qth_lineedit_set_placeholder(h: int, text: string)
+    fn qth_lineedit_set_read_only(h: int, read_only: i8)
+    fn qth_lineedit_set_echo_password(h: int, is_password: i8)
+
+    ;; QCheckBox
+    fn qth_checkbox_is_checked(h: int) -> i8
+    fn qth_checkbox_set_checked(h: int, checked: i8)
+
+    ;; QSlider
+    fn qth_slider_get_value(h: int) -> i32
+    fn qth_slider_set_value(h: int, value: i32)
+
+    ;; Dialogi
+    fn qth_show_info(parent_h: int, title: string, text: string)
+    fn qth_show_warning(parent_h: int, title: string, text: string)
+    fn qth_show_error(parent_h: int, title: string, text: string)
+    fn qth_show_question(parent_h: int, title: string, text: string) -> i8
+
+    ;; Kolejka zdarzeń
+    fn qth_poll_event() -> i32
+    fn qth_event_handle() -> int
+
+    ;; Pamięć
+    fn qth_free_string(s: string)
+end
+
+;; Same archiwum `libqthsharp.a` nie ma żadnych zależności Qt zapisanych
+;; jako `-l...` (to statyczna biblioteka .a, nie .so z wpisanym DT_NEEDED),
+;; więc program końcowy sam musi dociągnąć Qt6 + libstdc++ przy
+;; linkowaniu. Ten blok nie deklaruje żadnych funkcji — służy wyłącznie
+;; do wstrzyknięcia flag linkera (`pkg-config --libs Qt6Widgets`, co samo
+;; w sobie ciągnie Qt6Core/Qt6Gui przez `Requires:` w plikach .pc, plus
+;; automatyczne `-lstdc++` doklejane przez H# dla każdego bloku `[c++]`).
+extern dynamic [c++, "Qt6Widgets"] is
+end
+
+;; ── Typy wysokiego poziomu ───────────────────────────────────────────
+
+;; Uchwyt do dowolnego widgetu Qt (QWidget i pochodne: okno, przycisk,
+;; etykieta, pole tekstowe, checkbox, suwak, kontener).
+struct Widget is
+    pub handle: int
+end
+
+;; Uchwyt do layoutu Qt (QVBoxLayout / QHBoxLayout).
+struct Layout is
+    pub handle: int
+end
+
+enum EventKind is
+    Clicked
+    TextChanged
+    ReturnPressed
+    Toggled
+    WindowClosed
+    ValueChanged
+    Unknown
+end
+
+struct Event is
+    pub kind:   EventKind
+    pub widget: Widget
+end
+
+fn event_kind_from_i32(k: i32) -> EventKind is
+    match k is
+        1 => is return EventKind::Clicked end
+        2 => is return EventKind::TextChanged end
+        3 => is return EventKind::ReturnPressed end
+        4 => is return EventKind::Toggled end
+        5 => is return EventKind::WindowClosed end
+        6 => is return EventKind::ValueChanged end
+        _ => is return EventKind::Unknown end
+    end
+end
+
+;; ── Aplikacja ────────────────────────────────────────────────────────
+
+;; Inicjalizuje `QApplication` (jednorazowo — kolejne wywołania są
+;; bezpieczne i nic nie robią). Wywołaj to jako pierwszą rzecz w `main()`.
+pub fn init() is
+    qth_app_init()
+end
+
+;; Uruchamia natywną, blokującą pętlę zdarzeń Qt (`QApplication::exec()`).
+;; Użyj tego zamiast ręcznej pętli `poll_event()`, jeśli Twoja aplikacja
+;; nie potrzebuje nic robić poza reagowaniem na zdarzenia GUI — w takim
+;; wypadku podłącz logikę pod widgety *przed* wywołaniem `run()` i
+;; sprawdzaj zdarzenia w osobnym wątku/timerze (poza zakresem tej wersji
+;; biblioteki) albo po prostu użyj pętli `poll_event()` poniżej, która
+;; działa świetnie dla zwykłych, jednowątkowych aplikacji H#.
+pub fn run() -> int is
+    return qth_app_exec()
+end
+
+;; Kończy pętlę zdarzeń uruchomioną przez `run()`.
+pub fn quit() is
+    qth_app_quit()
+end
+
+;; Przetwarza oczekujące zdarzenia Qt bez blokowania — wywołuj to w
+;; każdej iteracji własnej pętli głównej przed `poll_event()`.
+pub fn process_events() is
+    qth_app_process_events()
+end
+
+;; Czy aplikacja wciąż działa (nikt nie wywołał jeszcze `quit()`).
+pub fn is_running() -> bool is
+    return qth_app_is_running() != 0
+end
+
+pub fn set_style(style_name: string) is
+    qth_app_set_style(style_name)
+end
+
+pub fn set_app_name(name: string) is
+    qth_app_set_app_name(name)
+end
+
+;; Odbiera pojedyncze zdarzenie z kolejki, jeśli jakieś czeka (albo `nil`,
+;; gdy kolejka jest pusta). Typowe użycie:
+;;
+;;   let mut keep_going: bool = true
+;;   while keep_going is
+;;       qt::process_events()
+;;       let ev = qt::poll_event()
+;;       if ev != nil is
+;;           match ev.kind is
+;;               qt::EventKind::Clicked      => is write("kliknięto!") end
+;;               qt::EventKind::WindowClosed => is keep_going = false end
+;;               _                           => is end
+;;           end
+;;       end
+;;       keep_going = keep_going && qt::is_running()
+;;   end
+pub fn poll_event() -> Event? is
+    let kind_raw: i32 = qth_poll_event()
+    if kind_raw == 0 is
+        return nil
+    end
+    return Event {
+        kind:   event_kind_from_i32(kind_raw),
+        widget: Widget { handle: qth_event_handle() },
+    }
+end
+
+;; ── Okna ─────────────────────────────────────────────────────────────
+
+pub fn new_window(title: string, width: i32, height: i32) -> Widget is
+    return Widget { handle: qth_window_new(title, width, height) }
+end
+
+pub fn window_set_central_widget(window: Widget, content: Widget) is
+    qth_window_set_central_widget(window.handle, content.handle)
+end
+
+pub fn window_set_title(window: Widget, title: string) is
+    qth_window_set_title(window.handle, title)
+end
+
+;; ── Widgety ──────────────────────────────────────────────────────────
+
+pub fn new_container() -> Widget is
+    return Widget { handle: qth_widget_new() }
+end
+
+pub fn new_button(text: string) -> Widget is
+    return Widget { handle: qth_button_new(text) }
+end
+
+pub fn button_set_text(button: Widget, text: string) is
+    qth_button_set_text(button.handle, text)
+end
+
+pub fn new_label(text: string) -> Widget is
+    return Widget { handle: qth_label_new(text) }
+end
+
+pub fn label_set_text(label: Widget, text: string) is
+    qth_label_set_text(label.handle, text)
+end
+
+pub fn label_get_text(label: Widget) -> string is
+    return qth_label_get_text(label.handle)
+end
+
+pub fn new_lineedit(placeholder: string) -> Widget is
+    return Widget { handle: qth_lineedit_new(placeholder) }
+end
+
+pub fn lineedit_get_text(edit: Widget) -> string is
+    return qth_lineedit_get_text(edit.handle)
+end
+
+pub fn lineedit_set_text(edit: Widget, text: string) is
+    qth_lineedit_set_text(edit.handle, text)
+end
+
+pub fn lineedit_set_placeholder(edit: Widget, text: string) is
+    qth_lineedit_set_placeholder(edit.handle, text)
+end
+
+pub fn lineedit_set_read_only(edit: Widget, read_only: bool) is
+    qth_lineedit_set_read_only(edit.handle, if read_only then 1 else 0)
+end
+
+pub fn lineedit_set_password_mode(edit: Widget, is_password: bool) is
+    qth_lineedit_set_echo_password(edit.handle, if is_password then 1 else 0)
+end
+
+pub fn new_checkbox(text: string) -> Widget is
+    return Widget { handle: qth_checkbox_new(text) }
+end
+
+pub fn checkbox_is_checked(checkbox: Widget) -> bool is
+    return qth_checkbox_is_checked(checkbox.handle) != 0
+end
+
+pub fn checkbox_set_checked(checkbox: Widget, checked: bool) is
+    qth_checkbox_set_checked(checkbox.handle, if checked then 1 else 0)
+end
+
+pub fn new_slider(min: i32, max: i32, initial: i32) -> Widget is
+    return Widget { handle: qth_slider_new(min, max, initial) }
+end
+
+pub fn slider_get_value(slider: Widget) -> i32 is
+    return qth_slider_get_value(slider.handle)
+end
+
+pub fn slider_set_value(slider: Widget, value: i32) is
+    qth_slider_set_value(slider.handle, value)
+end
+
+;; ── Layouty ──────────────────────────────────────────────────────────
+
+pub fn new_vbox() -> Layout is
+    return Layout { handle: qth_vbox_new() }
+end
+
+pub fn new_hbox() -> Layout is
+    return Layout { handle: qth_hbox_new() }
+end
+
+pub fn layout_add_widget(layout: Layout, widget: Widget) is
+    qth_layout_add_widget(layout.handle, widget.handle)
+end
+
+pub fn layout_add_spacing(layout: Layout, px: i32) is
+    qth_layout_add_spacing(layout.handle, px)
+end
+
+pub fn layout_add_stretch(layout: Layout, stretch: i32) is
+    qth_layout_add_stretch(layout.handle, stretch)
+end
+
+pub fn layout_set_margins(layout: Layout, l: i32, t: i32, r: i32, b: i32) is
+    qth_layout_set_margins(layout.handle, l, t, r, b)
+end
+
+pub fn widget_set_layout(widget: Widget, layout: Layout) is
+    qth_widget_set_layout(widget.handle, layout.handle)
+end
+
+;; ── Wspólne operacje na widgetach ────────────────────────────────────
+
+pub fn show(widget: Widget) is
+    qth_widget_show(widget.handle)
+end
+
+pub fn hide(widget: Widget) is
+    qth_widget_hide(widget.handle)
+end
+
+pub fn close(widget: Widget) is
+    qth_widget_close(widget.handle)
+end
+
+pub fn resize(widget: Widget, w: i32, h: i32) is
+    qth_widget_resize(widget.handle, w, h)
+end
+
+pub fn move_to(widget: Widget, x: i32, y: i32) is
+    qth_widget_move(widget.handle, x, y)
+end
+
+pub fn set_enabled(widget: Widget, enabled: bool) is
+    qth_widget_set_enabled(widget.handle, if enabled then 1 else 0)
+end
+
+pub fn set_visible(widget: Widget, visible: bool) is
+    qth_widget_set_visible(widget.handle, if visible then 1 else 0)
+end
+
+pub fn set_style_sheet(widget: Widget, css: string) is
+    qth_widget_set_style_sheet(widget.handle, css)
+end
+
+pub fn set_fixed_size(widget: Widget, w: i32, h: i32) is
+    qth_widget_set_fixed_size(widget.handle, w, h)
+end
+
+;; Zwalnia widget, który nie jest już potrzebny i nie ma rodzica
+;; (widgety dodane do layoutu / okna są zwalniane automatycznie przez Qt
+;; razem z rodzicem — to jest tylko dla ręcznie tworzonych, osieroconych
+;; uchwytów).
+pub fn destroy(widget: Widget) is
+    qth_widget_destroy(widget.handle)
+end
+
+;; ── Dialogi ──────────────────────────────────────────────────────────
+
+pub fn show_info(parent: Widget, title: string, text: string) is
+    qth_show_info(parent.handle, title, text)
+end
+
+pub fn show_warning(parent: Widget, title: string, text: string) is
+    qth_show_warning(parent.handle, title, text)
+end
+
+pub fn show_error(parent: Widget, title: string, text: string) is
+    qth_show_error(parent.handle, title, text)
+end
+
+pub fn show_question(parent: Widget, title: string, text: string) -> bool is
+    return qth_show_question(parent.handle, title, text) != 0
+end
